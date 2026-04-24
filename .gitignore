@@ -59,3 +59,9 @@ pip-delete-this-directory.txt
 .claude/settings.local.json
 .env.example
 .env.docker
+
+# Docker dev smoke-test artifacts
+dev-build.log
+
+# Local backups created during commit splitting
+.EEGViewer.full.tsx.bak
