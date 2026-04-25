@@ -17,6 +17,11 @@ RUN npm ci
 # Copy source files
 COPY . .
 
+# Ensure public directory exists. BuildKit may drop a directory whose only
+# content is a dotfile like .gitkeep, which later breaks
+# `COPY --from=nextjs-builder /app/public ./public` in the runtime stage.
+RUN mkdir -p /app/public && ls -la /app/public
+
 # Build Next.js application
 ENV NEXT_TELEMETRY_DISABLED=1
 # Set auth mode at build time for client-side detection

@@ -10,14 +10,6 @@ services:
       - "3000:3000"
     env_file:
       - .env.docker
-    environment:
-      - ADMIN_EMAIL=${ADMIN_EMAIL:-alexdni@gmail.com}
-      - ADMIN_PASSWORD=${ADMIN_PASSWORD:-Pass1234!}
-      - DEPLOYMENT_MODE=docker
-      - DATABASE_MODE=postgres
-      - STORAGE_MODE=local
-      - AUTH_MODE=local
-      - NODE_ENV=production
     volumes:
       - squiggly-data:/data
     restart: unless-stopped
