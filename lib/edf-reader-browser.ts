@@ -219,6 +219,51 @@ export async function parseEDFFile(arrayBuffer: ArrayBuffer): Promise<EDFData> {
 }
 
 /**
+ * Parse the EDF header's startDate ("dd.mm.yy") and startTime ("hh.mm.ss")
+ * into a JavaScript Date representing when the recording started.
+ *
+ * EDF+ year convention: years 00-84 are 2000-2084, years 85-99 are 1985-1999.
+ * Some recorders emit "hh:mm:ss" or "dd-mm-yy" as separators, so both are
+ * tolerated. Returns null if either field is missing or unparseable.
+ *
+ * Note: EDF does not encode a timezone. The Date is constructed in the local
+ * timezone of the *viewer* (JS default). If you later add a timezone column
+ * to recordings, adjust at the display layer instead of here.
+ */
+export function parseEDFStartDateTime(
+  startDate: string,
+  startTime: string
+): Date | null {
+  if (!startDate || !startTime) return null;
+
+  const dateParts = startDate.split(/[.\-/]/);
+  const timeParts = startTime.split(/[.:]/);
+  if (dateParts.length !== 3 || timeParts.length !== 3) return null;
+
+  const day = parseInt(dateParts[0], 10);
+  const month = parseInt(dateParts[1], 10);
+  const yy = parseInt(dateParts[2], 10);
+  const hours = parseInt(timeParts[0], 10);
+  const minutes = parseInt(timeParts[1], 10);
+  const seconds = parseInt(timeParts[2], 10);
+
+  if (
+    !Number.isFinite(day) ||
+    !Number.isFinite(month) ||
+    !Number.isFinite(yy) ||
+    !Number.isFinite(hours) ||
+    !Number.isFinite(minutes) ||
+    !Number.isFinite(seconds)
+  ) {
+    return null;
+  }
+
+  const fullYear = yy < 85 ? 2000 + yy : 1900 + yy;
+  const d = new Date(fullYear, month - 1, day, hours, minutes, seconds);
+  return Number.isNaN(d.getTime()) ? null : d;
+}
+
+/**
  * Extract a time window from the signals
  */
 export function extractTimeWindow(

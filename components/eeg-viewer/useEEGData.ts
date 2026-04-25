@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import {
   parseEDFFile,
+  parseEDFStartDateTime,
   type EDFData,
 } from '@/lib/edf-reader-browser';
 import {
@@ -58,6 +59,8 @@ export function useEEGData(recordingId: string, filePath: string) {
           duration: filteredData.duration,
           channelNames: filteredData.channelNames,
           fileType: 'csv',
+          // CSV carries no wall-clock start timestamp.
+          startDateTime: null,
         });
       } else {
         // EDF and BDF share the same reader (auto-detects format from header)
@@ -83,6 +86,10 @@ export function useEEGData(recordingId: string, filePath: string) {
           duration: parsedData.duration,
           channelNames: eegNames,
           fileType: fileExtension === 'bdf' ? 'bdf' : 'edf',
+          startDateTime: parseEDFStartDateTime(
+            parsedData.header.startDate,
+            parsedData.header.startTime
+          ),
         });
       }
     } catch (err: any) {

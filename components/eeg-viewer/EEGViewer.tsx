@@ -7,6 +7,7 @@ import { useEEGAnnotations } from './useEEGAnnotations';
 import EEGUnifiedChart from './EEGUnifiedChart';
 import EEGToolbar from './EEGToolbar';
 import EEGTimeSlider from './EEGTimeSlider';
+import EEGTimeRange from './EEGTimeRange';
 import EEGAnnotationModal from './EEGAnnotationModal';
 import { DEFAULT_FILTER_SETTINGS, type FilterSettings, type RejectedEpoch, type EEGAnnotation } from './types';
 
@@ -104,6 +105,20 @@ export default function EEGViewer({ recordingId, filePath, rejectedEpochs }: EEG
     });
   }, []);
 
+  // EDF does not encode a timezone. We format in the viewer's local tz,
+  // which is the usual desired behavior: users interpret the clock values
+  // as the wall time the recorder saw.
+  const formatRecordingStart = (d: Date): string =>
+    d.toLocaleString(undefined, {
+      year: 'numeric',
+      month: 'short',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+      hour12: false,
+    });
+
   const cleanChannelLabel = (label: string): string => {
     // Strip common reference/derivation suffixes. These are always *single*
     // scalp reference electrodes appended after a dash; we deliberately do NOT
@@ -147,6 +162,31 @@ export default function EEGViewer({ recordingId, filePath, rejectedEpochs }: EEG
       <h2 className="text-2xl font-bold text-neuro-dark mb-4">
         Raw EEG Signals
       </h2>
+
+      {/* Recording metadata (start time, duration, sample rate). The start
+          timestamp comes from the EDF/BDF header; CSV has no equivalent. */}
+      <div className="mb-4 flex flex-wrap items-center gap-x-6 gap-y-1 text-sm bg-gray-50 border border-gray-200 rounded-md px-3 py-2">
+        <div>
+          <span className="font-semibold text-gray-700">Recording started:</span>{' '}
+          {signalData.startDateTime ? (
+            <span className="text-gray-900" title={signalData.startDateTime.toISOString()}>
+              {formatRecordingStart(signalData.startDateTime)}
+            </span>
+          ) : (
+            <span className="text-gray-500 italic">
+              Not recorded ({signalData.fileType.toUpperCase()} has no start timestamp)
+            </span>
+          )}
+        </div>
+        <div>
+          <span className="font-semibold text-gray-700">Duration:</span>{' '}
+          <span className="text-gray-900">{signalData.duration.toFixed(1)}s</span>
+        </div>
+        <div>
+          <span className="font-semibold text-gray-700">Sample rate:</span>{' '}
+          <span className="text-gray-900">{signalData.sampleRate.toFixed(0)} Hz</span>
+        </div>
+      </div>
 
       {/* Channel selector */}
       <div className="mb-3">
@@ -203,6 +243,19 @@ export default function EEGViewer({ recordingId, filePath, rejectedEpochs }: EEG
       {/* Chart */}
       {selectedChannels.length > 0 ? (
         <>
+          {/* Window time range shown above the chart, mirroring the slider
+              label at the bottom so users can see the current window's
+              elapsed + absolute time without looking away from the signal. */}
+          <div className="mb-1 px-1">
+            <EEGTimeRange
+              currentStart={timeStart}
+              windowDuration={filterSettings.windowDurationSeconds}
+              totalDuration={signalData.duration}
+              startDateTime={signalData.startDateTime}
+              orientation="horizontal"
+            />
+          </div>
+
           <EEGUnifiedChart
             filteredSignals={filteredSignals}
             timeLabels={timeLabels}
@@ -224,6 +277,7 @@ export default function EEGViewer({ recordingId, filePath, rejectedEpochs }: EEG
             windowDuration={filterSettings.windowDurationSeconds}
             totalDuration={signalData.duration}
             onTimeChange={setTimeStart}
+            startDateTime={signalData.startDateTime}
           />
         </>
       ) : (

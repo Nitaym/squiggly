@@ -31,6 +31,13 @@ export interface UnifiedSignalData {
   duration: number;
   channelNames: string[];
   fileType: 'edf' | 'bdf' | 'csv';
+  /**
+   * Wall-clock time at which the recording started, when the source file
+   * carries it. EDF/BDF encode this in the fixed header; CSV does not, so
+   * this is null for CSV uploads. EDF does not encode a timezone, so the
+   * Date is interpreted in the viewer's local timezone.
+   */
+  startDateTime: Date | null;
 }
 
 export interface RejectedEpoch {

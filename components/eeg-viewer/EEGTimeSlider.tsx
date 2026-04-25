@@ -1,10 +1,19 @@
 'use client';
 
+import EEGTimeRange from './EEGTimeRange';
+
 interface EEGTimeSliderProps {
   currentStart: number;
   windowDuration: number;
   totalDuration: number;
   onTimeChange: (newStart: number) => void;
+  /**
+   * Wall-clock time at which the recording started, if the source format
+   * provides it (EDF/BDF). When supplied, the slider label shows the
+   * absolute clock time of the current window in addition to the elapsed
+   * offset. CSV uploads pass null and fall back to elapsed-only.
+   */
+  startDateTime?: Date | null;
 }
 
 export default function EEGTimeSlider({
@@ -12,6 +21,7 @@ export default function EEGTimeSlider({
   windowDuration,
   totalDuration,
   onTimeChange,
+  startDateTime,
 }: EEGTimeSliderProps) {
   const maxStart = Math.max(0, totalDuration - windowDuration);
 
@@ -22,8 +32,6 @@ export default function EEGTimeSlider({
   const handleNext = () => {
     onTimeChange(Math.min(maxStart, currentStart + windowDuration));
   };
-
-  const endTime = Math.min(currentStart + windowDuration, totalDuration);
 
   return (
     <div className="flex items-center gap-3 mt-2">
@@ -53,9 +61,14 @@ export default function EEGTimeSlider({
         Next
       </button>
 
-      <span className="text-xs text-gray-600 whitespace-nowrap min-w-[140px] text-right">
-        {currentStart.toFixed(1)}s - {endTime.toFixed(1)}s / {totalDuration.toFixed(1)}s
-      </span>
+      <EEGTimeRange
+        currentStart={currentStart}
+        windowDuration={windowDuration}
+        totalDuration={totalDuration}
+        startDateTime={startDateTime}
+        orientation="vertical"
+        className="items-end min-w-[180px]"
+      />
     </div>
   );
 }
