@@ -45,12 +45,22 @@ function isEEGChannel(channelName: string): boolean {
   return ALL_EEG_CHANNELS.some(ch => ch.toLowerCase() === channelLower);
 }
 
+export interface CSVValidationOptions {
+  /**
+   * When true, accept any non-excluded channel as valid (bypass the 10-20
+   * allow-list). Used for iEEG/sEEG and other non-scalp modalities uploaded
+   * in viewer-only mode.
+   */
+  skipMontageCheck?: boolean;
+}
+
 /**
  * Validate CSV file from buffer
  * Parses CSV header and calculates metadata
  */
 export async function validateCSVFile(
-  buffer: Buffer
+  buffer: Buffer,
+  options: CSVValidationOptions = {}
 ): Promise<ValidationResult> {
   try {
     // Convert buffer to string
@@ -91,7 +101,7 @@ export async function validateCSVFile(
     const ecgChannels: string[] = [];
 
     for (const channel of allChannels) {
-      // Skip excluded channels
+      // Skip excluded channels (motion sensors / impedance / rails etc.)
       if (isExcludedChannel(channel)) {
         console.log(`[CSV Validator] Excluding channel: ${channel} (motion sensor or impedance)`);
         continue;
@@ -108,6 +118,12 @@ export async function validateCSVFile(
         validChannels.push(channel);
         ecgChannels.push(channel);
         console.log(`[CSV Validator] Including ECG channel: ${channel}`);
+        continue;
+      }
+
+      if (options.skipMontageCheck) {
+        // Viewer-only: accept any unknown (non-excluded) column as a signal channel.
+        validChannels.push(channel);
         continue;
       }
 

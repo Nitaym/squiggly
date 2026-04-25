@@ -42,6 +42,12 @@ export default function UploadPage() {
     useManual: false,
   });
 
+  // Viewer-only mode skips the 10-20 montage requirement so non-scalp
+  // recordings (iEEG/sEEG, custom montages, etc.) can be uploaded for raw
+  // viewing and time-range annotation. All scalp-EEG analyses are disabled
+  // for these recordings — the user will only see the raw viewer.
+  const [viewerOnly, setViewerOnly] = useState(false);
+
   const handleFileSelected = (file: File) => {
     setState({
       ...state,
@@ -101,6 +107,7 @@ export default function UploadPage() {
           filePath,
           fileSize: state.file.size,
           ...labels,
+          viewerOnly,
         }),
       });
 
@@ -144,7 +151,9 @@ export default function UploadPage() {
           </button>
           <h1 className="text-3xl font-bold text-neuro-dark">Upload EEG Recording</h1>
           <p className="text-gray-800 mt-2">
-            Upload a 19-channel EDF file for EO/EC analysis
+            Upload a 19-channel EDF/BDF/CSV file for EO/EC analysis, or switch
+            on <span className="font-medium">Viewer-only</span> below to upload
+            any other montage for raw viewing and tagging.
           </p>
         </div>
 
@@ -208,10 +217,46 @@ export default function UploadPage() {
                 </div>
               </div>
 
-              <EOECLabelingForm
-                onLabelsChange={setLabels}
-                recordingDuration={undefined}
-              />
+              {/* Viewer-only toggle: bypasses the 10-20 montage requirement for
+                  non-scalp recordings (iEEG/sEEG, custom montages). All
+                  scalp-EEG analyses are disabled for the uploaded recording. */}
+              <div className="border-2 border-gray-200 rounded-lg p-4">
+                <label className="flex items-start gap-3 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={viewerOnly}
+                    onChange={(e) => setViewerOnly(e.target.checked)}
+                    className="mt-1 h-4 w-4 accent-neuro-primary"
+                  />
+                  <div className="flex-1">
+                    <div className="font-medium text-neuro-dark">
+                      Viewer-only upload (skip montage check)
+                    </div>
+                    <p className="text-sm text-gray-700 mt-1">
+                      Accept files without the 10-20 scalp-EEG montage (e.g. iEEG/sEEG
+                      depth electrodes, custom layouts). The raw viewer and
+                      time-range annotation tools will work, but all scalp-EEG
+                      analyses (topomaps, FAA, wPLI connectivity, band power
+                      norms, risk patterns, AI interpretation) will be disabled
+                      for this recording.
+                    </p>
+                    {viewerOnly && (
+                      <p className="text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded px-2 py-1 mt-2">
+                        Reminder: analysis outputs are meaningful only for scalp
+                        10-20 recordings. Viewer-only mode is for raw inspection
+                        and manual tagging.
+                      </p>
+                    )}
+                  </div>
+                </label>
+              </div>
+
+              {!viewerOnly && (
+                <EOECLabelingForm
+                  onLabelsChange={setLabels}
+                  recordingDuration={undefined}
+                />
+              )}
 
               <div className="flex gap-4">
                 <button
@@ -225,7 +270,7 @@ export default function UploadPage() {
                   disabled={state.uploading}
                   className="flex-1 px-6 py-3 bg-neuro-primary text-white rounded-lg hover:bg-neuro-accent transition-colors disabled:opacity-50"
                 >
-                  Upload and Validate
+                  {viewerOnly ? 'Upload (viewer-only)' : 'Upload and Validate'}
                 </button>
               </div>
             </div>
@@ -263,7 +308,9 @@ export default function UploadPage() {
               <div>
                 <h2 className="text-2xl font-bold text-neuro-dark">Upload Successful!</h2>
                 <p className="text-gray-800 mt-2">
-                  Your EEG recording has been uploaded and validated. Analysis is now queued.
+                  {viewerOnly
+                    ? 'Your recording has been uploaded. Open it to view the raw signals and add annotations — no analysis will run.'
+                    : 'Your EEG recording has been uploaded and validated. Analysis is now queued.'}
                 </p>
               </div>
               <div className="flex gap-4 justify-center">

@@ -105,12 +105,16 @@ export default function EEGViewer({ recordingId, filePath, rejectedEpochs }: EEG
   }, []);
 
   const cleanChannelLabel = (label: string): string => {
+    // Strip common reference/derivation suffixes. These are always *single*
+    // scalp reference electrodes appended after a dash; we deliberately do NOT
+    // strip arbitrary bipolar derivations (e.g. `LMH_01-LMH_02`) because those
+    // encode the pair and should be shown in full.
     return label
       .replace(/^EEG\s+/i, '')
-      .replace(/-LE$/i, '')
-      .replace(/-REF$/i, '')
-      .replace(/-M1$/i, '')
-      .replace(/-M2$/i, '')
+      .replace(/-(LE|REF|AVG|AVE)$/i, '')
+      .replace(/-(A1|A2|A1A2|A2A1)$/i, '')
+      .replace(/-(M1|M2)$/i, '')
+      .replace(/-(Fz|Cz|Pz|Oz|Fpz)$/i, '')
       .trim();
   };
 

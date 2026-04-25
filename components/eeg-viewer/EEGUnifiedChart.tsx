@@ -148,7 +148,7 @@ export default function EEGUnifiedChart({
         intersect: false,
       },
       layout: {
-        padding: { left: 60 },
+        padding: { left: 84 },
       },
       plugins: {
         legend: { display: false },

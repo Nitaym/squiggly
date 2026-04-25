@@ -62,13 +62,24 @@ function normalizeChannelName(ch: string): string {
   return normalized;
 }
 
+export interface MontageValidationOptions {
+  /**
+   * When true, skip the requirement for the 10-20 base channel set. The header
+   * is still parsed for duration/sampling rate/channels so the recording can be
+   * viewed and annotated in the UI, but no scalp-EEG analysis is expected to
+   * succeed. Used for iEEG/sEEG and other non-scalp modalities.
+   */
+  skipMontageCheck?: boolean;
+}
+
 /**
  * Shared montage validation for EDF/BDF files.
  * Both formats share the same header layout after the version field.
  */
 async function validateMontage(
   buffer: Buffer,
-  format: 'EDF' | 'BDF'
+  format: 'EDF' | 'BDF',
+  options: MontageValidationOptions = {}
 ): Promise<ValidationResult> {
   try {
     // Check minimum size (256 bytes for header)
@@ -110,13 +121,18 @@ async function validateMontage(
     const nChannels = parseInt(buffer.toString('ascii', 252, 256).trim());
 
     // Validate channel count - support 10-20 (19, 21 channels) and 10-10 (24+ channels)
-    // We accept any count >= 19 as long as it contains the required 10-20 base channels
-    const isValidCount = !isNaN(nChannels) && nChannels >= EXPECTED_CHANNELS_19;
+    // We accept any count >= 19 as long as it contains the required 10-20 base channels.
+    // For viewer-only uploads (skipMontageCheck) we still require at least one channel so
+    // the file isn't obviously malformed, but we drop the 19-channel floor.
+    const minChannels = options.skipMontageCheck ? 1 : EXPECTED_CHANNELS_19;
+    const isValidCount = !isNaN(nChannels) && nChannels >= minChannels;
 
     if (!isValidCount) {
       return {
         valid: false,
-        error: `Expected at least ${EXPECTED_CHANNELS_19} channels, found ${nChannels}. This tool requires 10-20 or 10-10 montage.`,
+        error: options.skipMontageCheck
+          ? `Expected at least 1 channel, found ${nChannels}.`
+          : `Expected at least ${EXPECTED_CHANNELS_19} channels, found ${nChannels}. This tool requires 10-20 or 10-10 montage.`,
       };
     }
 
@@ -178,33 +194,38 @@ async function validateMontage(
       hasA2A1Reference,
     });
 
-    // Base required channels (10-20 montage without ear references)
-    // All montages must contain at least these 19 channels
-    const requiredBaseChannels = MONTAGE_10_20_19CH;
+    // Base required channels (10-20 montage without ear references).
+    // All montages must contain at least these 19 channels — unless this is a
+    // viewer-only upload for a non-scalp modality (iEEG/sEEG/custom).
+    if (!options.skipMontageCheck) {
+      const requiredBaseChannels = MONTAGE_10_20_19CH;
 
-    // Check if all required base channels are present (among EEG channels only)
-    const missingChannels = requiredBaseChannels.filter(
-      (ch) => !eegChannelLabels.includes(ch)
-    );
+      // Check if all required base channels are present (among EEG channels only)
+      const missingChannels = requiredBaseChannels.filter(
+        (ch) => !eegChannelLabels.includes(ch)
+      );
 
-    if (missingChannels.length > 0) {
-      return {
-        valid: false,
-        error: `Missing required channels: ${missingChannels.join(', ')}. Expected 10-20 or 10-10 montage with base channels. Found EEG channels: ${eegChannelLabels.join(', ')}`,
-      };
-    }
+      if (missingChannels.length > 0) {
+        return {
+          valid: false,
+          error: `Missing required channels: ${missingChannels.join(', ')}. Expected 10-20 or 10-10 montage with base channels. Found EEG channels: ${eegChannelLabels.join(', ')}`,
+        };
+      }
 
-    // Check for unknown channels among the non-excluded ones
-    const extraChannels = eegChannelLabels.filter(
-      (ch) =>
-        !ALL_EEG_CHANNELS.includes(ch) &&
-        ch !== 'A1' &&
-        ch !== 'A2'
-    );
+      // Check for unknown channels among the non-excluded ones
+      const extraChannels = eegChannelLabels.filter(
+        (ch) =>
+          !ALL_EEG_CHANNELS.includes(ch) &&
+          ch !== 'A1' &&
+          ch !== 'A2'
+      );
 
-    // Only warn about unknown channels, don't reject
-    if (extraChannels.length > 0) {
-      console.log(`[${format} Validator] Unknown channels (will be ignored):`, extraChannels);
+      // Only warn about unknown channels, don't reject
+      if (extraChannels.length > 0) {
+        console.log(`[${format} Validator] Unknown channels (will be ignored):`, extraChannels);
+      }
+    } else {
+      console.log(`[${format} Validator] Montage check skipped (viewer-only upload). Accepting ${eegChannelLabels.length} channels.`);
     }
 
     // Skip to samples per record (after several other fields)
@@ -253,9 +274,10 @@ async function validateMontage(
  * Parses EDF header structure without loading full signal data
  */
 export async function validateEDFMontage(
-  buffer: Buffer
+  buffer: Buffer,
+  options: MontageValidationOptions = {}
 ): Promise<ValidationResult> {
-  return validateMontage(buffer, 'EDF');
+  return validateMontage(buffer, 'EDF', options);
 }
 
 /**
@@ -263,7 +285,8 @@ export async function validateEDFMontage(
  * BDF is structurally identical to EDF but uses 0xFF+BIOSEMI version and 24-bit samples
  */
 export async function validateBDFMontage(
-  buffer: Buffer
+  buffer: Buffer,
+  options: MontageValidationOptions = {}
 ): Promise<ValidationResult> {
-  return validateMontage(buffer, 'BDF');
+  return validateMontage(buffer, 'BDF', options);
 }

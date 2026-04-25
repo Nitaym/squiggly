@@ -305,6 +305,11 @@ export default function AnalysisDetailsClient({
 
   const aiInterpretation: AIInterpretation | null = analysis.results?.ai_interpretation || null;
 
+  // Viewer-only recordings skip the 10-20 montage requirement at upload time
+  // and do not run the scalp-EEG analysis pipeline. The details page shows
+  // only the raw viewer and a brief explanation; all analysis UI is hidden.
+  const isViewerOnly = analysis.config?.viewer_only === true;
+
   return (
     <main className="min-h-screen bg-neuro-light">
       {/* Navigation */}
@@ -362,7 +367,7 @@ export default function AnalysisDetailsClient({
               <p className="text-gray-800">{analysis.recording.filename}</p>
             </div>
             <div className="flex items-center gap-3">
-              {analysis.status === 'completed' && (
+              {analysis.status === 'completed' && !isViewerOnly && (
                 <button
                   onClick={handleReanalyze}
                   disabled={isReanalyzing}
@@ -385,11 +390,13 @@ export default function AnalysisDetailsClient({
                 </button>
               )}
               <div
-                className={`px-4 py-2 rounded-lg font-medium ${getStatusColor(
-                  analysis.status
-                )}`}
+                className={`px-4 py-2 rounded-lg font-medium ${
+                  isViewerOnly
+                    ? 'text-purple-700 bg-purple-100'
+                    : getStatusColor(analysis.status)
+                }`}
               >
-                {getStatusText(analysis.status)}
+                {isViewerOnly ? 'Viewer-Only Recording' : getStatusText(analysis.status)}
               </div>
             </div>
           </div>
@@ -474,8 +481,39 @@ export default function AnalysisDetailsClient({
           rejectedEpochs={analysis.results?.rejected_epochs}
         />
 
+        {/* Viewer-only recordings: replace the full analysis workflow with a
+            short explanatory banner. Scalp-EEG analyses don't apply. */}
+        {isViewerOnly && (
+          <div className="bg-purple-50 border border-purple-200 rounded-lg p-6 mb-6 mt-6">
+            <div className="flex items-start gap-3">
+              <svg className="h-6 w-6 text-purple-600 mt-0.5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+              <div>
+                <h3 className="text-lg font-semibold text-purple-900 mb-1">
+                  Viewer-Only Recording
+                </h3>
+                <p className="text-sm text-purple-800">
+                  This recording was uploaded with the 10-20 montage check
+                  disabled (e.g. iEEG/sEEG or a custom layout). Only the raw
+                  signal viewer and manual time-range annotations are available —
+                  scalp-EEG analyses (topomaps, band power norms, FAA, wPLI
+                  connectivity, complexity, risk patterns, AI interpretation)
+                  would produce invalid results on this data and have been
+                  disabled.
+                </p>
+                <p className="text-xs text-purple-700 mt-2">
+                  Use the viewer above to inspect the signals and tag regions of
+                  interest. Annotations are saved per-recording and can be
+                  exported from the project view.
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Analysis Results or Status Message */}
-        {analysis.status === 'pending' && (
+        {!isViewerOnly && analysis.status === 'pending' && (
           <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-6 mb-6">
             <div className="flex items-center mb-4">
               <svg
@@ -634,7 +672,7 @@ export default function AnalysisDetailsClient({
           </div>
         )}
 
-        {analysis.status === 'processing' && (
+        {!isViewerOnly && analysis.status === 'processing' && (
           <div className="bg-blue-50 border border-blue-200 rounded-lg p-6 mb-6">
             <div className="flex items-center">
               <div className="inline-block animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600 mr-3"></div>
@@ -655,7 +693,7 @@ export default function AnalysisDetailsClient({
           </div>
         )}
 
-        {analysis.status === 'failed' && (
+        {!isViewerOnly && analysis.status === 'failed' && (
           <div className="bg-red-50 border border-red-200 rounded-lg p-6 mb-6">
             <div>
               <h3 className="text-lg font-semibold text-red-900 mb-2">
@@ -676,7 +714,7 @@ export default function AnalysisDetailsClient({
           </div>
         )}
 
-        {analysis.status === 'completed' && analysis.results && (
+        {!isViewerOnly && analysis.status === 'completed' && analysis.results && (
           <>
             {/* QC Report */}
             {analysis.results.qc_report && (

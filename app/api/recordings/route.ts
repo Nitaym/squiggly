@@ -46,7 +46,10 @@ export async function POST(request: Request) {
       ecStart,
       ecEnd,
       useManual,
+      viewerOnly,
     } = body;
+
+    const isViewerOnly = viewerOnly === true;
 
     if (!projectId || !filename || !filePath || !fileSize) {
       return NextResponse.json(
@@ -107,15 +110,15 @@ export async function POST(request: Request) {
     let validationResult;
 
     if (fileExtension === 'csv') {
-      console.log('[Recording] Validating CSV file');
+      console.log(`[Recording] Validating CSV file${isViewerOnly ? ' (viewer-only)' : ''}`);
       const { validateCSVFile } = await import('@/lib/csv-validator');
-      validationResult = await validateCSVFile(fileBuffer);
+      validationResult = await validateCSVFile(fileBuffer, { skipMontageCheck: isViewerOnly });
     } else if (fileExtension === 'edf') {
-      console.log('[Recording] Validating EDF file');
-      validationResult = await validateEDFMontage(fileBuffer);
+      console.log(`[Recording] Validating EDF file${isViewerOnly ? ' (viewer-only)' : ''}`);
+      validationResult = await validateEDFMontage(fileBuffer, { skipMontageCheck: isViewerOnly });
     } else if (fileExtension === 'bdf') {
-      console.log('[Recording] Validating BDF file');
-      validationResult = await validateBDFMontage(fileBuffer);
+      console.log(`[Recording] Validating BDF file${isViewerOnly ? ' (viewer-only)' : ''}`);
+      validationResult = await validateBDFMontage(fileBuffer, { skipMontageCheck: isViewerOnly });
     } else {
       return NextResponse.json(
         {
@@ -208,8 +211,8 @@ export async function POST(request: Request) {
       duration_seconds: metadata.duration_seconds,
       sampling_rate: metadata.sampling_rate,
       n_channels: metadata.n_channels,
-      montage: '10-20',
-      reference: 'LE',
+      montage: isViewerOnly ? 'custom' : '10-20',
+      reference: isViewerOnly ? 'custom' : 'LE',
       condition_type: conditionType,
       eo_label: finalEoLabel || null,
       ec_label: finalEcLabel || null,
@@ -233,11 +236,16 @@ export async function POST(request: Request) {
 
     const recordingResult = recording as any;
 
-    // Create analysis job with default config
+    // Create analysis job. For viewer-only recordings we still create the row so
+    // the existing "View" navigation keeps working, but we mark it with
+    // `viewer_only: true` so the analysis workflow UI is hidden and the worker
+    // is never started (the worker is only kicked off by an explicit click).
     const analysisData: any = {
       recording_id: recordingResult.id,
       status: 'pending',
-      config: DEFAULT_ANALYSIS_CONFIG,
+      config: isViewerOnly
+        ? { ...DEFAULT_ANALYSIS_CONFIG, viewer_only: true }
+        : DEFAULT_ANALYSIS_CONFIG,
     };
 
     const { data: analysis, error: analysisError } = await db
