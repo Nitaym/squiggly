@@ -69,6 +69,49 @@ export default function EEGViewer({ recordingId, filePath, rejectedEpochs }: EEG
     cancelAnnotation,
   } = useEEGAnnotations(recordingId);
 
+  // Keyboard shortcuts: N = next window, P = previous window.
+  // Disabled while the user is typing (any input/textarea/select/
+  // contenteditable focused) or while the annotation modal is open, so the
+  // shortcut doesn't fire while writing a description. Modifier combos
+  // (Ctrl/Meta/Alt) are passed through so browser shortcuts like Cmd-P or
+  // Ctrl-N still behave normally.
+  useEffect(() => {
+    if (!signalData) return;
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.ctrlKey || e.metaKey || e.altKey) return;
+      if (showModal) return;
+
+      const target = e.target as HTMLElement | null;
+      if (target) {
+        const tag = target.tagName;
+        if (
+          tag === 'INPUT' ||
+          tag === 'TEXTAREA' ||
+          tag === 'SELECT' ||
+          target.isContentEditable
+        ) {
+          return;
+        }
+      }
+
+      const key = e.key.toLowerCase();
+      if (key !== 'n' && key !== 'p') return;
+
+      e.preventDefault();
+      const windowDuration = filterSettings.windowDurationSeconds;
+      const maxStart = Math.max(0, signalData.duration - windowDuration);
+
+      setTimeStart((prev) => {
+        if (key === 'n') return Math.min(maxStart, prev + windowDuration);
+        return Math.max(0, prev - windowDuration);
+      });
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [signalData, filterSettings.windowDurationSeconds, showModal]);
+
   // Convert rejected epochs to annotation objects
   const rejectedAnnotations = useMemo<EEGAnnotation[]>(() => {
     if (!rejectedEpochs || !showRejectedEpochs) return [];

@@ -38,9 +38,10 @@ export default function EEGTimeSlider({
       <button
         onClick={handlePrev}
         disabled={currentStart <= 0}
+        title="Previous window (P)"
         className="px-3 py-1 bg-neuro-primary text-white rounded text-sm disabled:opacity-50 hover:bg-neuro-accent transition-colors"
       >
-        Prev
+        Prev <span className="opacity-70 text-[10px] ml-1">P</span>
       </button>
 
       <input
@@ -56,9 +57,10 @@ export default function EEGTimeSlider({
       <button
         onClick={handleNext}
         disabled={currentStart + windowDuration >= totalDuration}
+        title="Next window (N)"
         className="px-3 py-1 bg-neuro-primary text-white rounded text-sm disabled:opacity-50 hover:bg-neuro-accent transition-colors"
       >
-        Next
+        Next <span className="opacity-70 text-[10px] ml-1">N</span>
       </button>
 
       <EEGTimeRange
