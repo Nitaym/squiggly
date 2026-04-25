@@ -17,7 +17,8 @@
 #   docker compose -f docker-compose.dev.yml up -d        # detached
 #   docker compose -f docker-compose.dev.yml logs -f      # follow logs
 #   docker compose -f docker-compose.dev.yml down         # stop + remove
-#   docker compose -f docker-compose.dev.yml down -v      # + wipe db/storage
+#   docker compose -f docker-compose.dev.yml down         # stops container; ./.docker-data/dev is kept
+#   (remove ./.docker-data/dev manually to wipe db/storage)
 
 services:
   squiggly-dev:
@@ -55,9 +56,8 @@ services:
       # or files the dev servers write very frequently).
       - /app/node_modules
       - /app/.next
-      # Persistent data (postgres + uploads) lives in a named volume so it
-      # survives `docker compose down` but can be wiped with `down -v`.
-      - squiggly-dev-data:/data
+      # Persistent data (postgres + uploads) on the host, under the repo.
+      - ./.docker-data/dev:/data
     restart: unless-stopped
     # Give the container a stable hostname for any code that cares.
     hostname: squiggly-dev
@@ -71,7 +71,3 @@ services:
       retries: 3
       # `next dev` takes a while on first compile, so give it a big grace.
       start_period: 120s
-
-volumes:
-  squiggly-dev-data:
-    driver: local

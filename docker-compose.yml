@@ -11,7 +11,7 @@ services:
     env_file:
       - .env.docker
     volumes:
-      - squiggly-data:/data
+      - ./.docker-data/prod:/data
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:3000/api/health"]
@@ -19,7 +19,3 @@ services:
       timeout: 10s
       retries: 3
       start_period: 60s
-
-volumes:
-  squiggly-data:
-    driver: local

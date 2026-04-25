@@ -55,6 +55,9 @@ pip-delete-this-directory.txt
 # Storage
 /tmp/
 /uploads/
+
+# Local Docker bind-mount data (Postgres cluster + uploads); see docker-compose*.yml
+.docker-data/
 .claude/settings.local.json
 .claude/settings.local.json
 .env.example
