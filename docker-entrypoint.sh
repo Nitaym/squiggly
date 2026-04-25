@@ -5,6 +5,20 @@ echo "========================================"
 echo "Squiggly EEG Analysis - Docker Startup"
 echo "========================================"
 
+# Resolve which schema file to apply. The production image pre-renames
+# scripts/schema-docker.sql -> scripts/schema.sql at build time, but the dev
+# image uses a bind-mount of the host tree, where only schema-docker.sql
+# exists. Support both so this script works in either mode.
+if [ -f /app/scripts/schema.sql ]; then
+    SCHEMA_FILE=/app/scripts/schema.sql
+elif [ -f /app/scripts/schema-docker.sql ]; then
+    SCHEMA_FILE=/app/scripts/schema-docker.sql
+else
+    echo "ERROR: No schema file found at /app/scripts/schema.sql or /app/scripts/schema-docker.sql"
+    exit 1
+fi
+echo "Using schema file: $SCHEMA_FILE"
+
 # Check required environment variables
 if [ "$AUTH_MODE" = "local" ]; then
     if [ -z "$ADMIN_EMAIL" ] || [ -z "$ADMIN_PASSWORD" ]; then
@@ -48,7 +62,7 @@ if [ ! -f "$PGDATA/PG_VERSION" ]; then
 
     # Apply schema (includes users table for local auth)
     echo "Applying database schema..."
-    su - postgres -s /bin/bash -c "$PG_BIN/psql -d squiggly -f /app/scripts/schema.sql"
+    su - postgres -s /bin/bash -c "$PG_BIN/psql -d squiggly -f $SCHEMA_FILE"
 
     # Grant permissions to squiggly user
     echo "Granting permissions..."
@@ -74,7 +88,7 @@ else
     sleep 3
 
     echo "Applying schema migrations..."
-    su - postgres -s /bin/bash -c "$PG_BIN/psql -d squiggly -f /app/scripts/schema.sql" 2>/dev/null || true
+    su - postgres -s /bin/bash -c "$PG_BIN/psql -d squiggly -f $SCHEMA_FILE" 2>/dev/null || true
 
     # Ensure permissions on any new tables
     su - postgres -s /bin/bash -c "$PG_BIN/psql -d squiggly -c \"

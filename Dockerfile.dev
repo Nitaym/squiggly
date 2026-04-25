@@ -1,0 +1,88 @@
+# Development Dockerfile for Squiggly
+# Single-stage image: installs Node + Python + PostgreSQL and the Node/Python
+# dependencies, but does NOT bake the Next.js build or the application source.
+# The source tree is bind-mounted at runtime via docker-compose.dev.yml, so
+# Next.js (next dev) and the Python worker (gunicorn --reload) pick up file
+# changes on the host without a rebuild.
+#
+# Build: docker compose -f docker-compose.dev.yml build
+# Run:   docker compose -f docker-compose.dev.yml up
+
+FROM python:3.11-slim
+
+# Install Node.js 20, PostgreSQL, supervisor, and the build deps the Python
+# scientific stack needs (MNE / numpy / scipy build from source on slim).
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        curl \
+        gnupg \
+        lsb-release \
+        supervisor \
+        postgresql \
+        postgresql-contrib \
+        build-essential \
+        gcc \
+        gfortran \
+        libopenblas-dev \
+        libopenblas0 \
+        libgomp1 \
+    && curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
+    && apt-get install -y --no-install-recommends nodejs \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+
+# ---------------------------------------------------------------------------
+# Python dependencies
+# ---------------------------------------------------------------------------
+# Installed into the image so the worker can start immediately. Bind-mounting
+# the source directory at /app won't shadow these because they live in the
+# system site-packages, not under /app.
+COPY api/workers/requirements.txt /tmp/requirements.txt
+RUN pip install --no-cache-dir -r /tmp/requirements.txt
+
+# ---------------------------------------------------------------------------
+# Node dependencies
+# ---------------------------------------------------------------------------
+# node_modules is baked into the image at /app/node_modules. docker-compose
+# mounts an anonymous volume at the same path so the host's (possibly empty
+# or wrong-platform) node_modules doesn't shadow the container's. To pick up
+# a new dependency, rebuild: `docker compose -f docker-compose.dev.yml build`.
+COPY package*.json ./
+RUN npm ci
+
+# ---------------------------------------------------------------------------
+# Supervisor (dev-specific program set) + entrypoint
+# ---------------------------------------------------------------------------
+COPY docker/supervisor/supervisord.dev.conf /etc/supervisor/conf.d/supervisord.conf
+COPY docker-entrypoint.sh /docker-entrypoint.sh
+RUN chmod +x /docker-entrypoint.sh
+
+# Persistent storage & postgres data directories (also expected by entrypoint).
+RUN mkdir -p /data/storage/recordings /data/storage/visuals /data/storage/exports /data/postgres
+
+# Default environment for dev. docker-compose.dev.yml can override anything.
+ENV DEPLOYMENT_MODE=docker \
+    DATABASE_MODE=postgres \
+    STORAGE_MODE=local \
+    AUTH_MODE=local \
+    NEXT_PUBLIC_AUTH_MODE=local \
+    STORAGE_PATH=/data/storage \
+    DATABASE_URL=postgresql://squiggly:squiggly@localhost:5432/squiggly \
+    WORKER_MODE=http \
+    WORKER_SERVICE_URL=http://localhost:8000 \
+    NODE_ENV=development \
+    PORT=3000 \
+    PYTHONUNBUFFERED=1 \
+    NEXT_TELEMETRY_DISABLED=1 \
+    # File watching over a bind-mount (especially on Windows/WSL2 and macOS)
+    # requires polling because inotify events don't always cross the bind.
+    WATCHPACK_POLLING=true \
+    CHOKIDAR_USEPOLLING=true \
+    CHOKIDAR_INTERVAL=500
+
+EXPOSE 3000 8000 5432
+
+VOLUME ["/data"]
+
+ENTRYPOINT ["/docker-entrypoint.sh"]
+CMD ["supervisord", "-c", "/etc/supervisor/conf.d/supervisord.conf"]

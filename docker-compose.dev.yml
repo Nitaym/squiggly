@@ -1,31 +1,76 @@
-version: '3.8'
-
-# Development configuration with hot-reload support
+# Development compose with live bind-mount + hot reload.
+#
+# Source tree is mounted at /app so edits on the host propagate instantly:
+#   - Next.js HMR picks up TS/TSX/CSS changes (next dev)
+#   - gunicorn --reload picks up Python changes under api/workers/
+#
+# Anonymous volumes shadow /app/node_modules and /app/.next with the image's
+# versions so the host's (possibly wrong-platform or missing) directories
+# don't override them. When you change package.json or install a new dep,
+# rebuild the image:
+#
+#   docker compose -f docker-compose.dev.yml build
+#   docker compose -f docker-compose.dev.yml up
+#
+# Usage:
+#   docker compose -f docker-compose.dev.yml up           # foreground w/ logs
+#   docker compose -f docker-compose.dev.yml up -d        # detached
+#   docker compose -f docker-compose.dev.yml logs -f      # follow logs
+#   docker compose -f docker-compose.dev.yml down         # stop + remove
+#   docker compose -f docker-compose.dev.yml down -v      # + wipe db/storage
 
 services:
   squiggly-dev:
     build:
       context: .
       dockerfile: Dockerfile.dev
+    image: squiggly-dev:latest
     container_name: squiggly-dev
     ports:
-      - "3000:3000"
-      - "8000:8000"
-      - "5432:5432"
+      - "3000:3000"   # Next.js dev server
+      - "8000:8000"   # Python worker (Flask via gunicorn)
+      - "5432:5432"   # PostgreSQL (useful for psql / GUI clients)
+    # ADMIN_EMAIL + ADMIN_PASSWORD and other secrets come from .env.docker,
+    # matching the production compose so you don't have to maintain two envs.
+    env_file:
+      - .env.docker
     environment:
-      - ADMIN_EMAIL=${ADMIN_EMAIL:-admin@local}
-      - ADMIN_PASSWORD=${ADMIN_PASSWORD:-changeme}
-      - DEPLOYMENT_MODE=docker
-      - DATABASE_MODE=postgres
-      - STORAGE_MODE=local
-      - AUTH_MODE=local
-      - NODE_ENV=development
+      # Force dev defaults even if .env.docker was copied from a prod deploy.
+      NODE_ENV: development
+      DEPLOYMENT_MODE: docker
+      DATABASE_MODE: postgres
+      STORAGE_MODE: local
+      AUTH_MODE: local
+      NEXT_PUBLIC_AUTH_MODE: local
+      # File watchers over bind-mounts need polling on Windows/WSL2 and macOS.
+      WATCHPACK_POLLING: "true"
+      CHOKIDAR_USEPOLLING: "true"
+      CHOKIDAR_INTERVAL: "500"
     volumes:
+      # Live source bind-mount. :cached prioritizes host writes over container
+      # reads (safe for dev; macOS/Windows get noticeably faster watch cycles).
       - .:/app:cached
+      # Anonymous volumes shadow the bind-mount for directories whose contents
+      # must stay as the container installed them (different platform binaries,
+      # or files the dev servers write very frequently).
       - /app/node_modules
       - /app/.next
+      # Persistent data (postgres + uploads) lives in a named volume so it
+      # survives `docker compose down` but can be wiped with `down -v`.
       - squiggly-dev-data:/data
     restart: unless-stopped
+    # Give the container a stable hostname for any code that cares.
+    hostname: squiggly-dev
+    # tty+stdin_open make Ctrl-C in `up` (foreground) behave sensibly.
+    tty: true
+    stdin_open: true
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:3000/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      # `next dev` takes a while on first compile, so give it a big grace.
+      start_period: 120s
 
 volumes:
   squiggly-dev-data:
