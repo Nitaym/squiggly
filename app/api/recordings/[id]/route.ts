@@ -14,6 +14,105 @@ interface AnalysisData {
   id: string;
 }
 
+interface UpdateRecordingBody {
+  notes?: string | null;
+}
+
+// PATCH /api/recordings/[id] - Update recording metadata
+export async function PATCH(
+  request: Request,
+  { params }: { params: { id: string } }
+) {
+  try {
+    const user = await getCurrentUser();
+
+    if (!user) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
+    const recordingId = params.id;
+    const body = await request.json() as UpdateRecordingBody;
+
+    if (!Object.prototype.hasOwnProperty.call(body, 'notes')) {
+      return NextResponse.json(
+        { error: 'No updatable fields provided' },
+        { status: 400 }
+      );
+    }
+
+    const rawNotes = body.notes;
+    if (rawNotes !== null && rawNotes !== undefined && typeof rawNotes !== 'string') {
+      return NextResponse.json(
+        { error: 'notes must be a string or null' },
+        { status: 400 }
+      );
+    }
+
+    const normalizedNotes =
+      rawNotes === null || rawNotes === undefined
+        ? null
+        : rawNotes.trim() === ''
+          ? null
+          : rawNotes.trim();
+
+    if (normalizedNotes && normalizedNotes.length > 2000) {
+      return NextResponse.json(
+        { error: 'notes must be 2000 characters or less' },
+        { status: 400 }
+      );
+    }
+
+    const db = getDatabaseClient();
+
+    const { data: recording, error: fetchError } = await db
+      .from('recordings')
+      .select('id, project_id')
+      .eq('id', recordingId)
+      .single();
+
+    const typedRecording = recording as Pick<RecordingData, 'id' | 'project_id'> | null;
+    if (fetchError || !typedRecording) {
+      return NextResponse.json(
+        { error: 'Recording not found' },
+        { status: 404 }
+      );
+    }
+
+    const hasPermission = await checkProjectPermission(
+      typedRecording.project_id,
+      user.id,
+      'recording:update'
+    );
+
+    if (!hasPermission) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+    }
+
+    const { data: updatedRecording, error: updateError } = await db
+      .from('recordings')
+      .update({ notes: normalizedNotes })
+      .eq('id', recordingId)
+      .select('*')
+      .single();
+
+    if (updateError) {
+      console.error('Error updating recording:', updateError);
+      return NextResponse.json(
+        { error: 'Failed to update recording' },
+        { status: 500 }
+      );
+    }
+
+    return NextResponse.json({ recording: updatedRecording });
+  } catch (error) {
+    console.error('Error in PATCH /api/recordings/[id]:', error);
+    return NextResponse.json(
+      { error: 'Internal server error' },
+      { status: 500 }
+    );
+  }
+}
+
 // DELETE /api/recordings/[id] - Delete a recording
 export async function DELETE(
   request: Request,

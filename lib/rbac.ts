@@ -9,6 +9,7 @@ export type Permission =
   | 'project:manage_members'
   | 'recording:create'
   | 'recording:read'
+  | 'recording:update'
   | 'recording:delete'
   | 'analysis:create'
   | 'analysis:read'
@@ -24,6 +25,7 @@ const ROLE_PERMISSIONS: Record<ProjectRole, Permission[]> = {
     'project:manage_members',
     'recording:create',
     'recording:read',
+    'recording:update',
     'recording:delete',
     'analysis:create',
     'analysis:read',
@@ -34,6 +36,7 @@ const ROLE_PERMISSIONS: Record<ProjectRole, Permission[]> = {
     'project:read',
     'recording:create',
     'recording:read',
+    'recording:update',
     'recording:delete',
     'analysis:create',
     'analysis:read',

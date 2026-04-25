@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
+import { formatStableDate } from '@/lib/date-format';
 
 interface DashboardClientProps {
   user: { id: string; email: string };
@@ -189,7 +190,7 @@ export default function DashboardClient({ user }: DashboardClientProps) {
                   )}
                   <div className="flex justify-between items-center">
                     <div className="text-xs text-gray-700">
-                      Created {new Date(project.created_at).toLocaleDateString()}
+                      Created {formatStableDate(project.created_at)}
                     </div>
                     <button className="text-neuro-primary hover:text-neuro-accent text-sm font-medium">
                       Open →

@@ -39,6 +39,7 @@ export interface Recording {
   id: string;
   project_id: string;
   filename: string;
+  notes: string | null;
   file_path: string;
   file_size: number;
   duration_seconds: number;

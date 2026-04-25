@@ -42,6 +42,7 @@ CREATE TABLE IF NOT EXISTS recordings (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
   project_id UUID NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
   filename TEXT NOT NULL,
+  notes TEXT,
   file_path TEXT NOT NULL,
   file_size BIGINT NOT NULL,
   duration_seconds NUMERIC(10, 2) NOT NULL,
@@ -136,3 +137,14 @@ CREATE TRIGGER update_analyses_updated_at BEFORE UPDATE ON analyses
 
 -- Note: In Docker mode, we don't use Row Level Security (RLS).
 -- Access control is handled at the application layer.
+
+-- ============================================================
+-- Migrations / additive changes
+-- These are idempotent and re-applied on every container restart
+-- by docker-entrypoint.sh. Add new ALTER TABLE statements here
+-- (always with IF NOT EXISTS / DROP IF EXISTS) when extending an
+-- existing table, since CREATE TABLE IF NOT EXISTS above is a
+-- no-op against existing tables.
+-- ============================================================
+
+ALTER TABLE recordings ADD COLUMN IF NOT EXISTS notes TEXT;

@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import ComparisonView from './ComparisonView';
+import { formatDateStable } from '@/lib/date-format';
 
 interface Project {
   id: string;
@@ -15,6 +16,7 @@ interface Project {
 interface Recording {
   id: string;
   filename: string;
+  notes: string | null;
   file_size: number;
   duration_seconds: number | null;
   created_at: string;
@@ -31,25 +33,51 @@ interface ProjectDetailsClientProps {
 
 type TabType = 'recordings' | 'overview' | 'comparison';
 
+const EO_EC_COLUMN_PREF_KEY = 'squiggly:projectDetails:showEoEcColumn';
+
 export default function ProjectDetailsClient({
   project,
   user,
 }: ProjectDetailsClientProps) {
   const router = useRouter();
   const [recordings, setRecordings] = useState<Recording[]>([]);
+  const [editingNotes, setEditingNotes] = useState<Record<string, string>>({});
+  const [notesStatus, setNotesStatus] = useState<Record<string, string>>({});
+  const [savingNoteId, setSavingNoteId] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<TabType>('recordings');
+  const [showEoEcColumn, setShowEoEcColumn] = useState<boolean>(false);
 
   useEffect(() => {
     fetchRecordings();
   }, []);
+
+  // Hydrate EO/EC column visibility preference from localStorage after mount
+  // (defer to client to avoid SSR/CSR markup mismatch).
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const stored = window.localStorage.getItem(EO_EC_COLUMN_PREF_KEY);
+    if (stored === 'true') setShowEoEcColumn(true);
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    window.localStorage.setItem(EO_EC_COLUMN_PREF_KEY, String(showEoEcColumn));
+  }, [showEoEcColumn]);
 
   const fetchRecordings = async () => {
     try {
       const response = await fetch(`/api/recordings?project_id=${project.id}`);
       if (!response.ok) throw new Error('Failed to fetch recordings');
       const data = await response.json();
-      setRecordings(data.recordings || []);
+      const fetchedRecordings = data.recordings || [];
+      setRecordings(fetchedRecordings);
+      setEditingNotes(
+        fetchedRecordings.reduce((acc: Record<string, string>, recording: Recording) => {
+          acc[recording.id] = recording.notes || '';
+          return acc;
+        }, {})
+      );
     } catch (error) {
       console.error('Error fetching recordings:', error);
     } finally {
@@ -142,6 +170,61 @@ export default function ProjectDetailsClient({
     }
   };
 
+  const handleNoteChange = (recordingId: string, value: string) => {
+    setEditingNotes((prev) => ({
+      ...prev,
+      [recordingId]: value,
+    }));
+    setNotesStatus((prev) => ({
+      ...prev,
+      [recordingId]: '',
+    }));
+  };
+
+  const handleSaveNotes = async (recordingId: string) => {
+    setSavingNoteId(recordingId);
+    setNotesStatus((prev) => ({ ...prev, [recordingId]: '' }));
+
+    try {
+      const response = await fetch(`/api/recordings/${recordingId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          notes: editingNotes[recordingId] ?? '',
+        }),
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || 'Failed to save notes');
+      }
+
+      const data = await response.json();
+      const updatedRecording = data.recording as Recording;
+
+      setRecordings((prev) =>
+        prev.map((recording) =>
+          recording.id === recordingId
+            ? { ...recording, notes: updatedRecording.notes }
+            : recording
+        )
+      );
+      setEditingNotes((prev) => ({
+        ...prev,
+        [recordingId]: updatedRecording.notes || '',
+      }));
+      setNotesStatus((prev) => ({ ...prev, [recordingId]: 'Saved' }));
+    } catch (error: any) {
+      console.error('Error saving recording notes:', error);
+      setNotesStatus((prev) => ({
+        ...prev,
+        [recordingId]: error.message || 'Failed to save',
+      }));
+    } finally {
+      setSavingNoteId(null);
+    }
+  };
+
   return (
     <main className="min-h-screen bg-neuro-light">
       {/* Navigation */}
@@ -189,7 +272,7 @@ export default function ProjectDetailsClient({
                 <p className="text-gray-800">{project.description}</p>
               )}
               <p className="text-sm text-gray-700 mt-2">
-                Created {new Date(project.created_at).toLocaleDateString()}
+                Created {formatDateStable(project.created_at)}
               </p>
             </div>
             <button
@@ -277,7 +360,19 @@ export default function ProjectDetailsClient({
               </button>
             </div>
           ) : (
-            <div className="overflow-x-auto">
+            <div>
+              <div className="flex justify-end mb-2">
+                <label className="flex items-center gap-2 text-sm text-gray-700 cursor-pointer select-none">
+                  <input
+                    type="checkbox"
+                    checked={showEoEcColumn}
+                    onChange={(e) => setShowEoEcColumn(e.target.checked)}
+                    className="rounded border-gray-300 text-neuro-primary focus:ring-neuro-primary"
+                  />
+                  Show EO/EC labels column
+                </label>
+              </div>
+              <div className="overflow-x-auto">
               <table className="min-w-full divide-y divide-gray-200">
                 <thead className="bg-gray-50">
                   <tr>
@@ -290,11 +385,16 @@ export default function ProjectDetailsClient({
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">
                       Duration
                     </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">
-                      EO/EC Labels
-                    </th>
+                    {showEoEcColumn && (
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">
+                        EO/EC Labels
+                      </th>
+                    )}
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">
                       Uploaded
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">
+                      Notes
                     </th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">
                       Actions
@@ -319,25 +419,42 @@ export default function ProjectDetailsClient({
                           {formatDuration(recording.duration_seconds)}
                         </div>
                       </td>
+                      {showEoEcColumn && (
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <div className="text-sm text-gray-800">
+                            {recording.eo_start !== null &&
+                            recording.ec_start !== null ? (
+                              <span className="text-green-600">✓ Labeled</span>
+                            ) : (
+                              <span className="text-yellow-600">
+                                ⚠ Not labeled
+                              </span>
+                            )}
+                          </div>
+                        </td>
+                      )}
                       <td className="px-6 py-4 whitespace-nowrap">
                         <div className="text-sm text-gray-800">
-                          {recording.eo_start !== null &&
-                          recording.ec_start !== null ? (
-                            <span className="text-green-600">✓ Labeled</span>
-                          ) : (
-                            <span className="text-yellow-600">
-                              ⚠ Not labeled
-                            </span>
-                          )}
+                          {formatDateStable(recording.created_at)}
                         </div>
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <div className="text-sm text-gray-800">
-                          {new Date(recording.created_at).toLocaleDateString()}
+                      <td className="px-6 py-4">
+                        <div className="space-y-2">
+                          <textarea
+                            value={editingNotes[recording.id] ?? ''}
+                            onChange={(e) => handleNoteChange(recording.id, e.target.value)}
+                            placeholder="Add recording notes..."
+                            rows={3}
+                            maxLength={2000}
+                            className="w-full min-w-[240px] px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-neuro-primary focus:border-transparent text-sm text-gray-900"
+                          />
+                          <div className="text-xs text-gray-600">
+                            {(editingNotes[recording.id] || '').length}/2000
+                          </div>
                         </div>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm">
-                        <div className="flex items-center gap-3">
+                        <div className="flex items-center gap-3 mb-2">
                           <button
                             className="text-neuro-primary hover:text-neuro-accent font-medium"
                             onClick={() => handleViewAnalysis(recording.id)}
@@ -351,11 +468,32 @@ export default function ProjectDetailsClient({
                             Delete
                           </button>
                         </div>
+                        <div className="flex items-center gap-3">
+                          <button
+                            className="text-gray-800 hover:text-gray-900 font-medium disabled:text-gray-400"
+                            onClick={() => handleSaveNotes(recording.id)}
+                            disabled={savingNoteId === recording.id}
+                          >
+                            {savingNoteId === recording.id ? 'Saving...' : 'Save Notes'}
+                          </button>
+                          {notesStatus[recording.id] && (
+                            <span
+                              className={`text-xs ${
+                                notesStatus[recording.id] === 'Saved'
+                                  ? 'text-green-600'
+                                  : 'text-red-600'
+                              }`}
+                            >
+                              {notesStatus[recording.id]}
+                            </span>
+                          )}
+                        </div>
                       </td>
                     </tr>
                   ))}
                 </tbody>
               </table>
+            </div>
             </div>
           )}
               </div>
@@ -380,7 +518,7 @@ export default function ProjectDetailsClient({
                       <div>
                         <dt className="text-sm font-medium text-gray-700">Created</dt>
                         <dd className="text-sm text-gray-900">
-                          {new Date(project.created_at).toLocaleDateString()}
+                          {formatDateStable(project.created_at)}
                         </dd>
                       </div>
                       {project.description && (

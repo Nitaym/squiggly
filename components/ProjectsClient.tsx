@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
+import { formatStableDate } from '@/lib/date-format';
 
 interface Project {
   id: string;
@@ -211,7 +212,7 @@ export default function ProjectsClient({ user }: ProjectsClientProps) {
                   </p>
                 )}
                 <div className="text-xs text-gray-700">
-                  Created {new Date(project.created_at).toLocaleDateString()}
+                  Created {formatStableDate(project.created_at)}
                 </div>
               </div>
             ))}

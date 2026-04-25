@@ -29,6 +29,7 @@ CREATE TABLE IF NOT EXISTS recordings (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
   project_id UUID NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
   filename TEXT NOT NULL,
+  notes TEXT,
   file_path TEXT NOT NULL,
   file_size BIGINT NOT NULL,
   duration_seconds NUMERIC(10, 2) NOT NULL,
@@ -354,3 +355,33 @@ CREATE POLICY "Users can delete their own annotations"
 -- INSERT INTO storage.buckets (id, name, public) VALUES ('recordings', 'recordings', false);
 -- INSERT INTO storage.buckets (id, name, public) VALUES ('visuals', 'visuals', false);
 -- INSERT INTO storage.buckets (id, name, public) VALUES ('exports', 'exports', false);
+
+-- ============================================================
+-- Migrations / additive changes (idempotent)
+-- Add new ALTER TABLE / DROP-then-CREATE POLICY statements here
+-- when extending an existing table. CREATE TABLE IF NOT EXISTS
+-- above is a no-op against existing tables, so these are needed
+-- to apply additive changes to live deployments.
+-- ============================================================
+
+ALTER TABLE recordings ADD COLUMN IF NOT EXISTS notes TEXT;
+
+-- Allow owners and collaborators to update recording metadata (e.g. notes)
+DROP POLICY IF EXISTS "Owners and collaborators can update recordings" ON recordings;
+CREATE POLICY "Owners and collaborators can update recordings"
+  ON recordings FOR UPDATE
+  USING (
+    EXISTS (
+      SELECT 1 FROM projects
+      WHERE projects.id = recordings.project_id
+      AND (
+        projects.owner_id = auth.uid() OR
+        EXISTS (
+          SELECT 1 FROM project_members
+          WHERE project_members.project_id = projects.id
+          AND project_members.user_id = auth.uid()
+          AND project_members.role IN ('owner', 'collaborator')
+        )
+      )
+    )
+  );
